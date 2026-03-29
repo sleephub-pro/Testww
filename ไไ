@@ -1,0 +1,320 @@
+-- =============================================
+--   AUTO FARM V1 + V2 + เลือกอาวุธ + กันหลุด + Boss Priority
+-- =============================================
+
+if not _G.AutoFarmVersion then _G.AutoFarmVersion = "V1" end
+if not _G.SelectedWeapon or (_G.SelectedWeapon ~= 1 and _G.SelectedWeapon ~= 2) then _G.SelectedWeapon = 2 end
+if _G.AntiDisconnect == nil then _G.AntiDisconnect = true end
+
+local weaponName = _G.SelectedWeapon == 1 and "Soul Reaper" or "Demon King"
+local skillNumber = _G.SelectedWeapon == 1 and 2 or 1
+
+print("🚀 Auto Farm Version:", _G.AutoFarmVersion, "| อาวุธ:", weaponName, "| สกิล:", skillNumber)
+print("🛡️ กันหลุด:", _G.AntiDisconnect and "เปิด" or "ปิด")
+print("👑 ระบบ Boss Priority: เปิด (จะหยุดฟาร์มแล้วไปหาบอสทันที)")
+
+local player = game:GetService("Players").LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local isBossMode = false
+
+-- =============================================
+--  ฟังก์ชันร่วม
+-- =============================================
+local function EquipSelectedWeapon()
+    local char = player.Character
+    if not char then return end
+    local tool = player.Backpack:FindFirstChild(weaponName)
+    if tool and not char:FindFirstChild(weaponName) then
+        char.Humanoid:EquipTool(tool)
+    end
+end
+
+local function UseSelectedSkill()
+    pcall(function()
+        ReplicatedStorage.AbilitySystem.Remotes.RequestAbility:FireServer(skillNumber)
+    end)
+end
+
+-- =============================================
+--  ระบบ Boss Priority (สำคัญที่สุด)
+-- =============================================
+local bossList = {
+    AizenBoss = {
+        portal = "HollowIsland",
+        pos = Vector3.new(-567.036499, -1.921275, 1228.272339)
+    },
+    GojoBoss = {
+        portal = "Shibuya",
+        pos = Vector3.new(1858.326660, 8.486135, 338.140015)
+    },
+    JinwooBoss = {
+        portal = "Sailor",
+        pos = Vector3.new(249.581726, 7.593238, 928.145264)
+    },
+    StrongestShinobiBoss = {
+        portal = "Ninja",
+        pos = Vector3.new(-2110.175537, 12.801344, -595.622314)
+    },
+    SukunaBoss = {
+        portal = "Shibuya",
+        pos = Vector3.new(1571.266724, 72.720535, -34.112698)
+    },
+    YujiBoss = {
+        portal = "Shibuya",
+        pos = Vector3.new(1537.928711, 8.486135, 226.108246)
+    },
+    YamatoBoss = {
+        portal = "Judgement",
+        pos = Vector3.new(-1422.681030, 21.470469, -1383.469604)
+    }
+}
+
+local function GoToBoss(bossName)
+    if isBossMode then return end
+    isBossMode = true
+    print("👑 พบบอส: " .. bossName .. " → หยุดฟาร์มแล้วไปจัดการทันที!")
+
+    local bossData = bossList[bossName]
+    if not bossData then isBossMode = false return end
+
+    -- เทเลพอร์ตไปเกาะ
+    pcall(function()
+        ReplicatedStorage.Remotes.TeleportToPortal:FireServer(bossData.portal)
+    end)
+    wait(0.8)
+
+    -- วาป + ลอย
+    local char = player.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local root = char.HumanoidRootPart
+        root.CFrame = CFrame.new(bossData.pos) + Vector3.new(0, 15, 0)
+        wait(0.3)
+
+        -- ลอยนิ่ง (ใช้ BodyVelocity หรือ Heartbeat ตามเวอร์ชัน)
+        if _G.AutoFarmVersion == "V2" then
+            local bv = Instance.new("BodyVelocity")
+            bv.MaxForce = Vector3.new(1e9,1e9,1e9)
+            bv.Velocity = Vector3.new(0,0,0)
+            bv.Parent = root
+            wait(0.1)
+            bv:Destroy()
+        else
+            -- V1 style
+            root.Velocity = Vector3.new(0,0,0)
+            root.AssemblyLinearVelocity = Vector3.new(0,0,0)
+        end
+    end
+
+    EquipSelectedWeapon()
+    wait(0.5)
+    UseSelectedSkill()   -- กดสกิลใส่บอส
+
+    print("⚔️ ไปถึงบอส " .. bossName .. " แล้ว กดสกิลเรียบร้อย")
+    wait(8)  -- รอสักครู่ (ปรับได้)
+    isBossMode = false
+end
+
+-- ตรวจจับบอสทุก 0.5 วินาที
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if isBossMode then continue end
+
+        for bossName, _ in pairs(bossList) do
+            if workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild(bossName) then
+                GoToBoss(bossName)
+                break
+            end
+        end
+    end
+end)
+
+-- =============================================
+--  ระบบกันหลุด 20 นาที
+-- =============================================
+if _G.AntiDisconnect then
+    task.spawn(function()
+        while true do
+            task.wait(20 * 60)
+            if not isBossMode and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                pcall(function()
+                    local hum = player.Character.Humanoid
+                    local root = player.Character.HumanoidRootPart
+                    if hum then hum.Jump = true end
+                    root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(20), 0)
+                    UseSelectedSkill()
+                end)
+                print("🛡️ กันหลุดทำงาน @ " .. os.date("%H:%M:%S"))
+            end
+        end
+    end)
+end
+
+-- =============================================
+--                  V1 CODE
+-- =============================================
+local function RunV1()
+    print("✅ เริ่มรัน V1 (Boss Priority เปิด)")
+    local root = player.Character:WaitForChild("HumanoidRootPart")
+    local floatConnection = nil
+
+    local function StartFloating()
+        if floatConnection then return end
+        player.Character.Humanoid.PlatformStand = true
+        floatConnection = RunService.Heartbeat:Connect(function()
+            if root and root.Parent then
+                root.Velocity = Vector3.new(0,0,0)
+                root.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                root.AssemblyAngularVelocity = Vector3.new(0,0,0)
+                local p = root.Position
+                root.CFrame = CFrame.new(p.X, p.Y, p.Z) * root.CFrame.Rotation
+            end
+        end)
+    end
+
+    local function TeleportAndFloat(cf)
+        root.CFrame = cf + Vector3.new(0, 12, 0)
+        wait(0.2)
+        StartFloating()
+    end
+
+    local function RemoveIslands()
+        local islands = {"JudgementIsland","LawlessIsland","NinjaIsland","SoulDominionIsland","TowerIsland","AcademyIsland","HollowIsland","ShinjukuIsland","BossIsland","DesertIsland","JungleIsland","SailorIsland","SlimeIsland","SnowIsland","StarterIsland"}
+        for _, v in ipairs(islands) do
+            if workspace:FindFirstChild(v) then workspace[v]:Destroy() end
+        end
+    end
+
+    local function BuyAllMerchantItems()
+        local merchant = ReplicatedStorage.Remotes.MerchantRemotes.PurchaseMerchantItem
+        local items = {{"Dungeon Key",999},{"Boss Key",999},{"Haki Color Reroll",1},{"Race Reroll",999},{"Rush Key",999},{"Passive Shard",999},{"Trait Reroll",999},{"Clan Reroll",999}}
+        for _, item in ipairs(items) do
+            pcall(function() merchant:InvokeServer(unpack(item)) end)
+            task.wait(0.12)
+        end
+    end
+
+    local portals = {
+        {name = "Ninja", pos = CFrame.new(-1875.734375, 8.514030, -732.247070)},
+        {name = "Lawless", pos = CFrame.new(58.674271, 0.578746, 1825.821777)},
+        {name = "Judgement", pos = CFrame.new(-1268.837280, 1.163063, -1184.665771)},
+        {name = "Academy", pos = CFrame.new(1059.421997, 1.463216, 1271.781860)},
+        {name = "Slime", pos = CFrame.new(-1121.603027, 13.918226, 371.301483)},
+        {name = "Shinjuku", pos = CFrame.new(-7.679499, 1.898112, -1842.801514)},
+    }
+
+    while _G.AutoFarmVersion == "V1" do
+        if isBossMode then task.wait(1) continue end
+
+        EquipSelectedWeapon()
+        RemoveIslands()
+        BuyAllMerchantItems()
+
+        for _, portal in ipairs(portals) do
+            if isBossMode then break end
+            EquipSelectedWeapon()
+            RemoveIslands()
+            ReplicatedStorage.Remotes.TeleportToPortal:FireServer(portal.name)
+            wait(0.5)
+            TeleportAndFloat(portal.pos)
+            wait(0.3)
+            UseSelectedSkill()
+            wait(0.1)
+        end
+
+        if not isBossMode then
+            print("✅ ครบ 1 รอบ V1")
+            wait(0.5)
+        end
+    end
+end
+
+-- =============================================
+--                  V2 CODE
+-- =============================================
+local function RunV2()
+    print("✅ เริ่มรัน V2 (Boss Priority เปิด)")
+    
+    -- ลบแมพ
+    local maps = {"JudgementIsland","LawlessIsland","NinjaIsland","SoulDominionIsland","TowerIsland","AcademyIsland","HollowIsland","ShinjukuIsland","BossIsland","DesertIsland","JungleIsland","SailorIsland","SlimeIsland","SnowIsland","StarterIsland"}
+    for _,v in pairs(maps) do
+        if workspace:FindFirstChild(v) then workspace[v]:Destroy() end
+    end
+
+    -- ซื้อของ
+    task.spawn(function()
+        while _G.AutoFarmVersion == "V2" do
+            if isBossMode then task.wait(2) continue end
+            local buyList = {{"Dungeon Key",999},{"Boss Key",999},{"Haki Color Reroll",1},{"Race Reroll",999},{"Rush Key",999},{"Passive Shard",999},{"Trait Reroll",999},{"Clan Reroll",999}}
+            for _,v in pairs(buyList) do
+                pcall(function() ReplicatedStorage.Remotes.MerchantRemotes.PurchaseMerchantItem:InvokeServer(v[1], v[2]) end)
+                task.wait(0.2)
+            end
+            task.wait(1)
+        end
+    end)
+
+    local data = {
+        {"Ninja","QuestNPC18",Vector3.new(-1875.734375,18.51403,-732.24707)},
+        {"Lawless","QuestNPC19",Vector3.new(58.674271,10.578746,1825.821777)},
+        {"Judgement","QuestNPC16",Vector3.new(-1268.83728,11.163063,-1184.665771)},
+        {"Academy","QuestNPC15",Vector3.new(1059.421997,11.463216,1271.78186)},
+        {"Slime","QuestNPC14",Vector3.new(-1121.603027,23.918226,371.301483)},
+    }
+    local shinjuku1 = Vector3.new(-7.679499,11.898112,-1842.801514)
+    local shinjuku2 = Vector3.new(658.236511,11.883463,-1688.614136)
+
+    local function startFloat()
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local bv = Instance.new("BodyVelocity")
+            bv.MaxForce = Vector3.new(1e9,1e9,1e9)
+            bv.Velocity = Vector3.new(0,0,0)
+            bv.Parent = hrp
+            task.delay(0.5, function() if bv then bv:Destroy() end end)
+        end
+    end
+
+    local function tp(pos)
+        local char = player.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char:PivotTo(CFrame.new(pos))
+            startFloat()
+        end
+    end
+
+    local function island(n) ReplicatedStorage.Remotes.TeleportToPortal:FireServer(n) end
+    local function quest(q) ReplicatedStorage.RemoteEvents.QuestAccept:FireServer(q) end
+
+    while _G.AutoFarmVersion == "V2" do
+        if isBossMode then task.wait(1) continue end
+
+        for _,v in pairs(data) do
+            if isBossMode then break end
+            quest(v[2]); task.wait(0.25)
+            island(v[1]); task.wait(0.7)
+            tp(v[3])
+            EquipSelectedWeapon(); task.wait(0.25)
+            UseSelectedSkill(); task.wait(1.2)
+        end
+
+        if not isBossMode then
+            -- Shinjuku
+            quest("QuestNPC13"); task.wait(0.25); island("Shinjuku"); task.wait(0.7); tp(shinjuku1); EquipSelectedWeapon(); task.wait(0.25); UseSelectedSkill(); task.wait(1.2)
+            quest("QuestNPC12"); task.wait(0.25); island("Shinjuku"); task.wait(0.7); tp(shinjuku2); EquipSelectedWeapon(); task.wait(0.25); UseSelectedSkill(); task.wait(1.2)
+        end
+        task.wait(1)
+    end
+end
+
+-- =============================================
+--  เริ่มรันตามเวอร์ชัน
+-- =============================================
+if _G.AutoFarmVersion == "V1" then
+    RunV1()
+elseif _G.AutoFarmVersion == "V2" then
+    RunV2()
+end
