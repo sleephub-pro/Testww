@@ -1,0 +1,86 @@
+-- =============================================
+-- Boss Priority (แก้เฉพาะตรงนี้)
+-- =============================================
+local bossTargets = {
+    { name = "AizenBoss", portal = "HollowIsland" },
+    { name = "GojoBoss", portal = "Shibuya" },
+    { name = "JinwooBoss", portal = "Sailor" },
+    { name = "StrongestShinobiBoss", portal = "Ninja" },
+    { name = "SukunaBoss", portal = "Shibuya" },
+    { name = "YujiBoss", portal = "Shibuya" },
+    { name = "YamatoBoss", portal = "Judgement" },
+}
+
+local bossBusy = false
+
+local function FloatToBoss(bossHRP)
+    local char = player.Character
+    if not char then return end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    hum.PlatformStand = true
+
+    if floatConnection then
+        floatConnection:Disconnect()
+    end
+
+    floatConnection = RunService.Heartbeat:Connect(function()
+        if not bossHRP or not bossHRP.Parent then return end
+
+        local target = bossHRP.Position + Vector3.new(0, 13, 0)
+        local current = hrp.Position
+        local dir = (target - current)
+
+        if dir.Magnitude > 3 then
+            hrp.CFrame = hrp.CFrame + dir.Unit * 60
+        else
+            hrp.CFrame = CFrame.new(target)
+        end
+
+        hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+    end)
+end
+
+local function HandleBossPriority()
+    if bossBusy then return true end
+
+    local npcs = workspace:FindFirstChild("NPCs")
+    if not npcs then return false end
+
+    for _, boss in ipairs(bossTargets) do
+        local model = npcs:FindFirstChild(boss.name)
+
+        if model and model:FindFirstChild("HumanoidRootPart") then
+            bossBusy = true
+
+            -- ❗ ยังวาปไปเกาะเดิมก่อน (เหมือนเดิม ไม่แก้)
+            pcall(function()
+                ReplicatedStorage.Remotes.TeleportToPortal:FireServer(boss.portal)
+            end)
+
+            task.wait(0.5)
+
+            -- ✅ เปลี่ยนตรงนี้: ลอยไปหา Boss จริง
+            FloatToBoss(model.HumanoidRootPart)
+
+            EquipSelectedWeapon()
+            task.wait(0.2)
+            UseSelectedSkill()
+
+            print("🎯 เจอบอส:", boss.name)
+
+            -- รอจนบอสหาย
+            repeat task.wait(0.3)
+            until not model or not model.Parent
+
+            bossBusy = false
+            return true
+        end
+    end
+
+    return false
+end
