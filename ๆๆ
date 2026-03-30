@@ -1,0 +1,216 @@
+-- =============================================
+-- AUTO FARM V1 + V2 + เลือกอาวุธ + กันหลุด + PRIORITY BOSS (FLOAT TO BOSS)
+-- =============================================
+if not _G.AutoFarmVersion then _G.AutoFarmVersion = "V1" end
+if not _G.SelectedWeapon or (_G.SelectedWeapon ~= 1 and _G.SelectedWeapon ~= 2) then
+    _G.SelectedWeapon = 2
+end
+if _G.AntiDisconnect == nil then _G.AntiDisconnect = true end
+
+local weaponName = _G.SelectedWeapon == 1 and "Soul Reaper" or "Demon King"
+local skillNumber = _G.SelectedWeapon == 1 and 2 or 1
+
+local player = game:GetService("Players").LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+-- =============================================
+-- ฟังก์ชันร่วม
+-- =============================================
+local function EquipSelectedWeapon()
+    local char = player.Character
+    if not char then return end
+    local tool = player.Backpack:FindFirstChild(weaponName)
+    if tool and not char:FindFirstChild(weaponName) then
+        char.Humanoid:EquipTool(tool)
+    end
+end
+
+local function UseSelectedSkill()
+    pcall(function()
+        ReplicatedStorage.AbilitySystem.Remotes.RequestAbility:FireServer(skillNumber)
+    end)
+end
+
+-- =============================================
+-- ลอยค้าง + ลอยไปหาเป้าหมาย
+-- =============================================
+local floatConnection
+local function FloatTo(targetPos)
+    local char = player.Character
+    if not char then return end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    hum.PlatformStand = true
+
+    if floatConnection then
+        floatConnection:Disconnect()
+    end
+
+    floatConnection = RunService.Heartbeat:Connect(function()
+        if not targetPos or not hrp then return end
+
+        local goal = targetPos + Vector3.new(0, 13, 0)
+        local current = hrp.Position
+        local direction = (goal - current)
+
+        if direction.Magnitude > 3 then
+            hrp.CFrame = hrp.CFrame + direction.Unit * 60 -- ความเร็วลอย
+        else
+            hrp.CFrame = CFrame.new(goal)
+        end
+
+        hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+    end)
+end
+
+-- =============================================
+-- Boss Priority (FLOAT TO REAL BOSS)
+-- =============================================
+local bossList = {
+    "AizenBoss",
+    "GojoBoss",
+    "JinwooBoss",
+    "StrongestShinobiBoss",
+    "SukunaBoss",
+    "YujiBoss",
+    "YamatoBoss"
+}
+
+local bossBusy = false
+
+local function HandleBossPriority()
+    if bossBusy then return true end
+
+    local npcs = workspace:FindFirstChild("NPCs")
+    if not npcs then return false end
+
+    for _, name in ipairs(bossList) do
+        local boss = npcs:FindFirstChild(name)
+
+        if boss and boss:FindFirstChild("HumanoidRootPart") then
+            bossBusy = true
+
+            local bossPos = boss.HumanoidRootPart.Position
+
+            print("🎯 เจอบอส:", name)
+
+            FloatTo(bossPos)
+            EquipSelectedWeapon()
+            task.wait(0.2)
+            UseSelectedSkill()
+
+            -- รอจนบอสหาย
+            repeat
+                task.wait(0.3)
+            until not boss or not boss.Parent
+
+            bossBusy = false
+            return true
+        end
+    end
+
+    return false
+end
+
+-- =============================================
+-- Anti Disconnect
+-- =============================================
+local function StartAntiDisconnect()
+    if not _G.AntiDisconnect then return end
+
+    task.spawn(function()
+        while true do
+            task.wait(20 * 60)
+
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local root = player.Character.HumanoidRootPart
+                local hum = player.Character:FindFirstChild("Humanoid")
+
+                pcall(function()
+                    if hum then hum.Jump = true end
+                    root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(15), 0)
+                    UseSelectedSkill()
+                end)
+            end
+        end
+    end)
+end
+
+StartAntiDisconnect()
+
+-- =============================================
+-- V1
+-- =============================================
+local function RunV1()
+    local root = player.Character:WaitForChild("HumanoidRootPart")
+
+    local portals = {
+        {name = "Ninja", pos = CFrame.new(-1875,8,-732)},
+        {name = "Lawless", pos = CFrame.new(58,0,1825)},
+        {name = "Judgement", pos = CFrame.new(-1268,1,-1184)},
+        {name = "Academy", pos = CFrame.new(1059,1,1271)},
+        {name = "Slime", pos = CFrame.new(-1121,13,371)},
+        {name = "Shinjuku", pos = CFrame.new(-7,1,-1842)},
+    }
+
+    while _G.AutoFarmVersion == "V1" do
+        if HandleBossPriority() then
+            task.wait()
+        else
+            for _, portal in ipairs(portals) do
+                if HandleBossPriority() then break end
+
+                ReplicatedStorage.Remotes.TeleportToPortal:FireServer(portal.name)
+                task.wait(0.3)
+
+                root.CFrame = portal.pos
+                task.wait(0.2)
+
+                UseSelectedSkill()
+            end
+        end
+    end
+end
+
+-- =============================================
+-- V2
+-- =============================================
+local function RunV2()
+    local data = {
+        {"Ninja","QuestNPC18",Vector3.new(-1875,18,-732)},
+        {"Lawless","QuestNPC19",Vector3.new(58,10,1825)},
+    }
+
+    while _G.AutoFarmVersion == "V2" do
+        if HandleBossPriority() then
+            task.wait()
+        else
+            for _, v in pairs(data) do
+                if HandleBossPriority() then break end
+
+                ReplicatedStorage.RemoteEvents.QuestAccept:FireServer(v[2])
+                task.wait(0.3)
+
+                ReplicatedStorage.Remotes.TeleportToPortal:FireServer(v[1])
+                task.wait(0.5)
+
+                player.Character:PivotTo(CFrame.new(v[3]))
+                UseSelectedSkill()
+            end
+        end
+    end
+end
+
+-- =============================================
+-- START
+-- =============================================
+if _G.AutoFarmVersion == "V1" then
+    RunV1()
+else
+    RunV2()
+end
