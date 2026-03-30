@@ -1,0 +1,128 @@
+-- =============================================
+-- BOSS HUNTER SYSTEM (Priority 1)
+-- =============================================
+local BossData = {
+    AizenBoss = {
+        portal = "HollowIsland",
+        pos = Vector3.new(-567.036499, -1.921275, 1228.272339)
+    },
+    GojoBoss = {
+        portal = "Shibuya",
+        pos = Vector3.new(1858.326660, 8.486135, 338.140015)
+    },
+    JinwooBoss = {
+        portal = "Sailor",
+        pos = Vector3.new(249.581726, 7.593238, 928.145264)
+    },
+    StrongestShinobiBoss = {
+        portal = "Ninja",
+        pos = Vector3.new(-2110.175537, 12.801344, -595.622314)
+    },
+    SukunaBoss = {
+        portal = "Shibuya",
+        pos = Vector3.new(1571.266724, 72.720535, -34.112698)
+    },
+    YujiBoss = {
+        portal = "Shibuya",
+        pos = Vector3.new(1537.928711, 8.486135, 226.108246)
+    },
+    YamatoBoss = {
+        portal = "Judgement",
+        pos = Vector3.new(-1422.681030, 21.470469, -1383.469604)
+    }
+}
+
+local currentBoss = nil
+local floatConnection = nil
+local bossFloatBV = nil
+
+local function StartBossFloat(hrp)
+    if bossFloatBV then bossFloatBV:Destroy() end
+    if floatConnection then floatConnection:Disconnect() end
+
+    -- วิธีลอยค้างแบบแรง (BodyVelocity + Heartbeat)
+    bossFloatBV = Instance.new("BodyVelocity")
+    bossFloatBV.Name = "BossFloatBV"
+    bossFloatBV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bossFloatBV.Velocity = Vector3.new(0, 0, 0)
+    bossFloatBV.Parent = hrp
+
+    floatConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if hrp and hrp.Parent then
+            local currentPos = hrp.Position
+            hrp.CFrame = CFrame.new(currentPos.X, currentPos.Y + 13, currentPos.Z) * hrp.CFrame.Rotation
+            hrp.Velocity = Vector3.new(0, 0, 0)
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        end
+    end)
+end
+
+local function GoToBoss(bossName)
+    if not BossData[bossName] then return end
+    currentBoss = bossName
+
+    local data = BossData[bossName]
+    print("🚨 พบบอส: " .. bossName .. " | ไปล่าเลย!")
+
+    -- หยุดฟาร์มชั่วคราว
+    _G.PausedForBoss = true
+
+    EquipSelectedWeapon()
+    task.wait(0.3)
+
+    -- เทเลพอร์ตไปเกาะ
+    pcall(function()
+        ReplicatedStorage.Remotes.TeleportToPortal:FireServer(data.portal)
+    end)
+    task.wait(0.8)
+
+    -- วาร์ปไปตำแหน่ง + ลอย 13 หน่วย
+    local char = player.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(data.pos) + Vector3.new(0, 13, 0)
+        task.wait(0.2)
+        StartBossFloat(hrp)
+    end
+
+    task.wait(0.5)
+    UseSelectedSkill()  -- กดสกิลทันที
+    print("⚔️ กำลังล่าบอส " .. bossName)
+end
+
+-- ตรวจจับบอสแบบเรียลไทม์
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+
+        local npcsFolder = workspace:FindFirstChild("NPCs")
+        if npcsFolder then
+            for bossName, _ in pairs(BossData) do
+                if npcsFolder:FindFirstChild(bossName) then
+                    if currentBoss ~= bossName then
+                        GoToBoss(bossName)
+                    end
+                    break
+                end
+            end
+        end
+
+        -- เช็คว่าบอสหายไปหรือยัง (กลับไปฟาร์มต่อ)
+        if currentBoss then
+            local npcsFolder = workspace:FindFirstChild("NPCs")
+            if not npcsFolder or not npcsFolder:FindFirstChild(currentBoss) then
+                print("✅ บอส " .. currentBoss .. " หายไปแล้ว | กลับไป Auto Farm")
+                currentBoss = nil
+                _G.PausedForBoss = false
+
+                -- ล้าง float
+                if bossFloatBV then bossFloatBV:Destroy() end
+                if floatConnection then floatConnection:Disconnect() end
+                bossFloatBV = nil
+                floatConnection = nil
+            end
+        end
+    end
+end)
+
+print("🛡️ ระบบล่าบอส (Boss Hunter) เปิดใช้งานแล้ว | ลำดับความสำคัญสูงสุด")
