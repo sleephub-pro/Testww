@@ -1,0 +1,209 @@
+-- =============================================
+-- AUTO FARM V1 + V2 + เลือกอาวุธ + กันหลุด + Boss Priority (บินไปหาบอส)
+-- =============================================
+if not _G.AutoFarmVersion then _G.AutoFarmVersion = "V1" end
+if not _G.SelectedWeapon or (_G.SelectedWeapon ~= 1 and _G.SelectedWeapon ~= 2) then
+    _G.SelectedWeapon = 2
+end
+if _G.AntiDisconnect == nil then _G.AntiDisconnect = true end
+
+local weaponName = _G.SelectedWeapon == 1 and "Soul Reaper" or "Demon King"
+local skillNumber = _G.SelectedWeapon == 1 and 2 or 1
+
+print("🚀 Auto Farm Version:", _G.AutoFarmVersion)
+print("🔫 อาวุธ:", weaponName, "| สกิล:", skillNumber)
+print("🛡️ ระบบกันหลุด:", _G.AntiDisconnect and "เปิด (ทุก 20 นาที)" or "ปิด")
+
+local player = game:GetService("Players").LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+-- =============================================
+-- ฟังก์ชันร่วม (เหมือนเดิม)
+-- =============================================
+local function EquipSelectedWeapon()
+    local char = player.Character
+    if not char then return end
+    local tool = player.Backpack:FindFirstChild(weaponName)
+    if tool and not char:FindFirstChild(weaponName) then
+        char.Humanoid:EquipTool(tool)
+    end
+end
+
+local function UseSelectedSkill()
+    pcall(function()
+        ReplicatedStorage.AbilitySystem.Remotes.RequestAbility:FireServer(skillNumber)
+    end)
+end
+
+-- ระบบกันหลุด (เหมือนเดิม)
+local function StartAntiDisconnect()
+    if not _G.AntiDisconnect then return end
+    task.spawn(function()
+        while true do
+            task.wait(20 * 60)
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local root = player.Character.HumanoidRootPart
+                local hum = player.Character:FindFirstChild("Humanoid")
+                pcall(function()
+                    if hum then hum.Jump = true end
+                    root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(15), 0)
+                    UseSelectedSkill()
+                end)
+                print("🛡️ ระบบกันหลุดทำงาน (" .. os.date("%H:%M:%S") .. ")")
+            end
+        end
+    end)
+end
+StartAntiDisconnect()
+
+-- =============================================
+-- ระบบบินไปหาบอส (ใหม่ตามที่ขอ)
+-- =============================================
+local bossData = {
+    AizenBoss          = {portal = "HollowIsland"},
+    GojoBoss           = {portal = "Shibuya"},
+    JinwooBoss         = {portal = "Sailor"},
+    StrongestShinobiBoss = {portal = "Ninja"},
+    SukunaBoss         = {portal = "Shibuya"},
+    YujiBoss           = {portal = "Shibuya"},
+    YamatoBoss         = {portal = "Judgement"},
+}
+
+local alignPos, alignOri, floatConnection, bodyVel = nil, nil, nil, nil
+
+local function StartFloating(height)
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    if floatConnection then floatConnection:Disconnect() end
+    if bodyVel then bodyVel:Destroy() end
+
+    bodyVel = Instance.new("BodyVelocity")
+    bodyVel.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+    bodyVel.Velocity = Vector3.new(0,0,0)
+    bodyVel.Parent = root
+
+    char.Humanoid.PlatformStand = true
+
+    floatConnection = RunService.Heartbeat:Connect(function()
+        if root and root.Parent then
+            local p = root.Position
+            root.CFrame = CFrame.new(p.X, p.Y, p.Z) * root.CFrame.Rotation
+            if math.abs(p.Y - height) > 1 then
+                root.Velocity = Vector3.new(0, (height - p.Y) * 20, 0)
+            else
+                root.Velocity = Vector3.new(0,0,0)
+            end
+        end
+    end)
+end
+
+local function StopFloating()
+    if floatConnection then floatConnection:Disconnect() floatConnection = nil end
+    if bodyVel then bodyVel:Destroy() bodyVel = nil end
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.PlatformStand = false
+    end
+    if alignPos then alignPos:Destroy() alignPos = nil end
+    if alignOri then alignOri:Destroy() alignOri = nil end
+end
+
+local function FlyToBoss(bossName)
+    local boss = Workspace.NPCs:FindFirstChild(bossName)
+    if not boss then return false end
+
+    print("🟥 พบบอส: " .. bossName .. " | กำลังบินไปหา...")
+
+    StopFloating()
+
+    -- Teleport ไปเกาะก่อน
+    pcall(function()
+        ReplicatedStorage.Remotes.TeleportToPortal:FireServer(bossData[bossName].portal)
+    end)
+    task.wait(1.5)
+
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+
+    -- สร้าง AlignPosition + AlignOrientation สำหรับบิน smooth
+    local attach0 = Instance.new("Attachment")
+    attach0.Parent = root
+
+    alignPos = Instance.new("AlignPosition")
+    alignPos.Attachment0 = attach0
+    alignPos.MaxForce = 1e6
+    alignPos.MaxVelocity = 120          -- ความเร็วบิน (ปรับได้)
+    alignPos.Responsiveness = 25
+    alignPos.Parent = root
+
+    alignOri = Instance.new("AlignOrientation")
+    alignOri.Attachment0 = attach0
+    alignOri.MaxTorque = 1e6
+    alignOri.Responsiveness = 20
+    alignOri.Parent = root
+
+    -- เริ่มบินไปหาบอส (อัพเดทตำแหน่งทุกเฟรม)
+    local flyingConn
+    flyingConn = RunService.Heartbeat:Connect(function()
+        if not Workspace.NPCs:FindFirstChild(bossName) then
+            flyingConn:Disconnect()
+            return
+        end
+        local bossPart = boss:FindFirstChild("HumanoidRootPart") or boss:FindFirstChildWhichIsA("BasePart")
+        if bossPart and root then
+            alignPos.Position = bossPart.Position + Vector3.new(0, 13, 0)  -- บินอยู่เหนือบอส 13 หน่วย
+            alignOri.CFrame = CFrame.lookAt(root.Position, bossPart.Position)
+        end
+    end)
+
+    EquipSelectedWeapon()
+    task.wait(0.5)
+    UseSelectedSkill()
+
+    -- รอจนบอสหายไป
+    while Workspace.NPCs:FindFirstChild(bossName) and _G.AutoFarmVersion do
+        task.wait(0.8)
+        EquipSelectedWeapon()
+        UseSelectedSkill()
+    end
+
+    if flyingConn then flyingConn:Disconnect() end
+    StopFloating()
+    print("✅ บอส " .. bossName .. " หายไปแล้ว | กลับไปฟาร์มปกติ")
+    task.wait(1)
+    return true
+end
+
+local function HandleBoss()
+    for bossName, _ in pairs(bossData) do
+        if Workspace.NPCs:FindFirstChild(bossName) then
+            return FlyToBoss(bossName)
+        end
+    end
+    return false
+end
+
+-- =============================================
+-- V1 และ V2 (เหมือนเดิมทุกอย่าง ยกเว้นเรียก HandleBoss)
+-- =============================================
+-- (ส่วน V1 และ V2 ฉันไม่แก้ไขตามที่คุณบอก "ไม่ต้องแก้อย่างอื่นที่ไม่ได้บอก")
+-- ใส่แค่ส่วนเดิมของคุณลงไป แล้วแทนที่จุดตรวจบอสด้วย HandleBoss() เหมือนเดิม
+
+-- ... วางโค้ด V1 และ V2 เดิมของคุณที่นี่ (จากข้อความก่อนหน้า) ...
+
+-- ตัวอย่างการเรียกในลูป (คุณสามารถแทนที่ส่วน HandleBoss() เดิมได้เลย)
+-- if HandleBoss() then continue end   -- หรือ break ตามที่เคยใช้
+
+-- =============================================
+-- เริ่มรัน (เหมือนเดิม)
+-- =============================================
+if _G.AutoFarmVersion == "V1" then
+    RunV1()
+elseif _G.AutoFarmVersion == "V2" then
+    RunV2()
+end
