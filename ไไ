@@ -1,0 +1,72 @@
+-- =============================================
+-- 🔥 BOSS PRIORITY SYSTEM (หยุดทุกอย่างแล้วไปบอส)
+-- =============================================
+local BossList = {
+    {name = "AizenBoss", portal = "HollowIsland"},
+    {name = "GojoBoss", portal = "Shibuya"},
+    {name = "JinwooBoss", portal = "Sailor"},
+    {name = "StrongestShinobiBoss", portal = "Ninja"},
+    {name = "SukunaBoss", portal = "Shibuya"},
+    {name = "YujiBoss", portal = "Shibuya"},
+    {name = "YamatoBoss", portal = "Judgement"},
+}
+
+local function FloatAtBoss(target)
+    local char = player.Character
+    if not char or not target then return end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    hrp.CFrame = target:GetPivot() + Vector3.new(0, 13, 0)
+
+    -- ลอยค้างนิ่ง
+    if hrp:FindFirstChild("BossFloat") then
+        hrp.BossFloat:Destroy()
+    end
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "BossFloat"
+    bv.MaxForce = Vector3.new(1e9,1e9,1e9)
+    bv.Velocity = Vector3.new(0,0,0)
+    bv.Parent = hrp
+end
+
+local function CheckBoss()
+    for _, boss in ipairs(BossList) do
+        local npcFolder = workspace:FindFirstChild("NPCs")
+        if npcFolder and npcFolder:FindFirstChild(boss.name) then
+            
+            local targetBoss = npcFolder[boss.name]
+
+            print("🔥 เจอบอส:", boss.name)
+
+            -- วาปไปแมพ
+            pcall(function()
+                game:GetService("ReplicatedStorage")
+                    :WaitForChild("Remotes")
+                    :WaitForChild("TeleportToPortal")
+                    :FireServer(boss.portal)
+            end)
+
+            task.wait(0.6)
+
+            -- ลอยไปหาบอส
+            FloatAtBoss(targetBoss)
+
+            -- ตีรัว
+            while targetBoss and targetBoss.Parent do
+                EquipSelectedWeapon()
+                UseSelectedSkill()
+                task.wait(0.1)
+            end
+
+            print("✅ บอสตาย:", boss.name)
+            task.wait(0.5)
+
+            return true -- เจอบอส
+        end
+    end
+
+    return false -- ไม่มีบอส
+end
